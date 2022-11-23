@@ -2,7 +2,7 @@
 import * as chai from 'chai';
 import * as path from 'path';
 import * as chaiAsPromised from 'chai-as-promised';
-import { query } from './consumer';
+import { query, client } from './consumer';
 import {
   Pact,
   GraphQLInteraction,
@@ -31,45 +31,89 @@ describe('GraphQL example', () => {
   after(() => provider.finalize());
 
   describe('query hello on /graphql', () => {
-    before(() => {
-      const graphqlQuery = new GraphQLInteraction()
-        .uponReceiving('a hello request')
-        .withQuery(
+    describe('a happy server', () => {
+      before(() => {
+        const graphqlQuery = new GraphQLInteraction()
+          .given("a happy server")
+          .uponReceiving('a hello request')
+          .withQuery(
+            `
+            query HelloQuery {
+              hello
+            }
           `
-          query HelloQuery {
-            hello
-          }
-        `
-        )
-        .withOperation('HelloQuery')
-        .withRequest({
-          path: '/graphql',
-          method: 'POST',
-        })
-        .withVariables({
-          foo: 'bar',
-        })
-        .willRespondWith({
-          status: 200,
-          headers: {
-            'Content-Type': 'application/json; charset=utf-8',
-          },
-          body: {
-            data: {
-              hello: like('Hello world!'),
+          )
+          .withOperation('HelloQuery')
+          .withRequest({
+            path: '/graphql',
+            method: 'POST',
+          })
+          .withVariables({
+            foo: 'bar',
+          })
+          .willRespondWith({
+            status: 200,
+            headers: {
+              'Content-Type': 'application/json; charset=utf-8',
             },
-          },
+            body: {
+              data: {
+                hello: like('Hello world!'),
+              },
+            },
+          });
+        return provider.addInteraction(graphqlQuery);
+      })
+      it('returns a happy response', () => {
+        return expect(query()).to.eventually.deep.equal({
+          hello: 'Hello world!',
         });
-      return provider.addInteraction(graphqlQuery);
+      });
     });
-
-    it('returns the correct response', () => {
-      return expect(query()).to.eventually.deep.equal({
-        hello: 'Hello world!',
+    describe('a sad server', () => {
+      before(() => {
+        const graphqlQuery = new GraphQLInteraction()
+          .given("a sad server")
+          .uponReceiving('a hello request')
+          .withQuery(
+            `
+            query HelloQuery {
+              hello
+            }
+          `
+          )
+          .withOperation('HelloQuery')
+          .withRequest({
+            path: '/graphql',
+            method: 'POST',
+          })
+          .withVariables({
+            foo: 'bar',
+          })
+          .willRespondWith({
+            status: 200,
+            headers: {
+              'Content-Type': 'application/json; charset=utf-8',
+            },
+            body: {
+              data: {
+                hello: like('Hello world...'),
+              },
+            },
+          });
+        return provider.addInteraction(graphqlQuery);
+      })
+      it('returns a sad response', () => {
+        return expect(query()).to.eventually.deep.equal({
+          hello: 'Hello world...',
+        });
       });
     });
 
     // verify with Pact, and reset expectations
-    afterEach(() => provider.verify());
+    afterEach(() => {
+      provider.verify();
+      client.cache.reset();
+    });
   });
 });
